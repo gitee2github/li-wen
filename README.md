@@ -4,20 +4,19 @@
 Tool for dynamic management of worker resources in OBS-Build system
 
 #### 软件架构
-软件架构说明
+aarch64 和 x86_64
 
 
 #### 安装教程
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1.  clone 仓库到/usr/
+2.  将service文件拷贝到 /usr/lib/systemd/system
 
 #### 使用说明
 
-1.  xxxx
-2.  xxxx
-3.  xxxx
+1.  启动：systemctl start wsdm
+2.  停止: systemctl stop wsdm
+
 
 #### 参与贡献
 
