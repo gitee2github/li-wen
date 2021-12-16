@@ -19,14 +19,17 @@ import configparser
 import math
 import os
 import re
-
 import time
+import yaml
 from libs.cloud.HWCloud.ecs_servers import ECSServers
 from libs.log.logger import log_check
 from libs.conf.queryconfig import query_config
 from main.common.aes_decode import AESEncryAndDecry
 from main.common.wsdm_thread import WsdmThread
 from main.monitor.workerstatus import QueryOBSWorker
+
+multi_arch = ["aarch64", "x86"]
+worker_excluded = '/usr/li-wen/libs/conf/excluded_workers.yaml'
 
 class AutoExtendWorker(object):
     """
@@ -61,19 +64,15 @@ class AutoExtendWorker(object):
         start_time = time.time()
         new_workers_info = []
         thread_arch_level = []
-        multi_arch = ["aarch64", "x86"]
-        for idx in range(2):
-            arch = multi_arch[idx]
+        
+        for idx, arch in enumerate(multi_arch):
             for level_idx in range(3):
                 level = 'l' + str(level_idx + 1)
                 try:
                     schedule = (schedule_events_list[idx].get(arch)).get(level)
                     idle = (idle_instances_list[idx].get(arch)).get(level)
-                except (AttributeError, KeyError) as err:
+                except AttributeError as err:
                     log_check.error(f"reason: {err}")
-                    continue
-                except (configparser.NoOptionError, configparser.NoSectionError) as err:
-                    log_check.error(f"reason: {err.message}")
                     continue
 
                 default_instances = query_config(self.worker_conf[level_idx], "instances")
@@ -90,7 +89,7 @@ class AutoExtendWorker(object):
                 log_check.info(f"Start thread for applying {arch}-{level} workers num: ({schedule}-{idle}) / {default_instances} = {worker_num}")
                 # 创建多线程，调用创建worker的接口
                 thread_name = arch + '_' + level
-                thread_func_args = [arch, level_idx, passwd, worker_num]
+                thread_func_args = [thread_name, arch, level_idx, passwd, worker_num]
                 thread = WsdmThread(thread_name, self.create_workers, thread_func_args, new_workers_info)
                 thread.start()
                 thread_arch_level.append(thread)
@@ -118,9 +117,9 @@ class AutoExtendWorker(object):
             return None
         return self.calcuate_and_create_worker(schedule_events_list, idle_instances_list, passwd)
 
-    def evaluate_workers_to_release(self, idle_workers, arch, num_check, interval):
+    def evaluate_idle_workers(self, idle_workers, num_check, interval):
         """
-        @description :评估并释放空闲worker
+        @description :评估空闲worker
         -----------
         @param :
             idle_workers：处于空闲状态的worker
@@ -131,52 +130,88 @@ class AutoExtendWorker(object):
         @returns :NA
         -----------
         """
+        start_time = time.time()
+        thread_arch_level = []
+        result_release = []
+        excluded_workers = self.excluded_workers # 不在评估是否释放的worker范围
+
+        for idx in range(2):
+            arch = multi_arch[idx]
+            try:
+                aarh_idle_workers = idle_workers[idx].get(arch)
+            except AttributeError as err:
+                log_check.error(f"reason: {err}")
+                continue
+
+            # 去掉不在可释放范围的worker ip
+            aarh_idle_workers = list(set(aarh_idle_workers).difference(set(excluded_workers.get(arch))))
+            
+            # 创建多线程，调用创建worker的接口
+            thread_name = arch + '_idle_workers'
+            thread_func_args = [thread_name, aarh_idle_workers, arch, num_check, interval]
+            thread = WsdmThread(thread_name, self.check_and_release_workers, thread_func_args, result_release)
+            thread.start()
+            thread_arch_level.append(thread)
+
+        for thread in thread_arch_level:
+            thread.join()
+            
+        # 回到主线程
+        log_check.info(f"end_time: {time.time() - start_time}")
+        return result_release
+
+    def check_and_release_workers(self, thread_name, idle_workers, arch, num_check, interval):
+        """
+        @description : 校验并释放worker
+        -----------
+        @param :
+            thread_name: 线程名
+            idle_workers：处于空闲状态的worker
+            arch：架构
+            num_check:校验worker的次数
+            interval：校验等待的时间间隔
+        -----------
+        @returns :
+            release_worker: 调用华为云delete的返回值
+        -----------
+        """
         release_worker_ip = idle_workers
-        hostnames = []
         count = 0
+        release_worker = {}
 
         while release_worker_ip and count < num_check:
-
-            # 获取worker的instance信息
             workers_instance_state = self.worker_query.get_worker_instance(release_worker_ip)
             if workers_instance_state is None:
-                log_check.error(f"No worker instance info, stop release!")
+                log_check.error(f"{thread_name}------No worker instance info, stop release!")
                 continue
             for worker_instance in workers_instance_state:
-                try:
-                    ip = worker_instance.get("ip")
-                except (AttributeError, KeyError) as err:
-                    log_check.error(f"reason: {err}")
-                    continue
-                except (configparser.NoOptionError, configparser.NoSectionError) as err:
-                    log_check.error(f"reason: {err.message}")
-                    continue
+                ip = worker_instance.get("ip")
                 hostname = self.server.get_hostname(ip)
                 instance_run = worker_instance.get("instance_run")
                 if instance_run > 0:
-                    log_check.warning(f"No release {ip}, {hostname}: it has running instances")
+                    log_check.warning(f"{thread_name}------No release {ip}, {hostname}: it has running instances")
                     release_worker_ip.remove(ip)
-                else:
-                    log_check.warning(f"Release {ip}, {hostname}: it has no running instances")
-            log_check.info(f"After {interval}s, we go on checking idle workers......")
+
+            log_check.info(f"{thread_name}------After {interval}s, we go on {count} checking idle workers......")
             time.sleep(interval)
             count += 1
 
         # 释放worker
         if release_worker_ip:
-            hostnames = [self.server.get_hostname(ip) for ip in release_worker_ip]
-            log_check.info(f"These {arch} workers will be released: {release_worker_ip}")
-            log_check.info(f"These {arch} workers will be released: {hostnames}")
-            self.delete_workers(release_worker_ip)
+            release_worker = self.delete_workers(thread_name, release_worker_ip)
+            release_worker['arch'] = arch
         else:
-            log_check.info(f"No workers will be released")
+            log_check.info(f"{thread_name}------No workers will be released")
+
+        return release_worker
         
     # 创建worker
-    def create_workers(self, arch, level_idx, passwd, num=1):
+    def create_workers(self, thread_name, arch, level_idx, passwd, num=1):
         """
         @description :创建对应架构、规格和数目的worker
         -----------
         @param :
+            thread_name: 线程名
             arch：结构
             level_idx：规格等级
             passwd：新worker的初始登录密码，账号默认为root
@@ -192,21 +227,18 @@ class AutoExtendWorker(object):
         ram = query_config(self.worker_conf[level_idx], "ram")
         jobs = query_config(self.worker_conf[level_idx], "jobs")
         level = 'l' + str(level_idx + 1)
-        log_check.info(f"Apply new workers: arch: {arch}, flavor: {level}, number: {num}")
+        log_check.info(f"{thread_name}------Apply new workers: arch: {arch}, flavor: {level}, number: {num}")
         result = self.server.create(arch, level, passwd, num)
 
         try:
             return_code = int(result.get("code"))
             if return_code != 200:
                 return_error = result.get("error")
-                log_check.error(f"ECSServers().create return: {return_error}")
+                log_check.error(f"{thread_name}------ECSServers().create return: {return_error}")
                 return apply_worker
             new_workers_ip = result.get("server_ips")
-        except (AttributeError, KeyError) as err:
-            log_check.error(f"reason: {err}")
-            return apply_worker
-        except (configparser.NoOptionError, configparser.NoSectionError) as err:
-            log_check.error(f"reason: {err.message}")
+        except AttributeError as err:
+            log_check.error(f"{thread_name}------reason: {err}")
             return apply_worker
 
         # 回到主进程：记录预申请的worker的关键属性
@@ -226,29 +258,33 @@ class AutoExtendWorker(object):
             apply_worker.append(new_worker)
         return apply_worker
 
-    def delete_workers(self, release_workers):
+    def delete_workers(self, thread_name, ips):
         """
         @description : 释放worker并清理后台残留信息
         -----------
         @param :
-            release_workers：待释放的worker ip列表
+            thread_name：线程名
+            ips：待释放的worker ip列表
         -----------
-        @returns :NA
+        @returns :
+            delete_result：释放返回结果
         -----------
         """
-        
-        delete_result = self.server.delete(release_workers)
-        log_check.info(f"Call HWCloud delete：{delete_result}")
+        #########
+        ips = []
+        ############
 
-        hostanmes = []
-        for worker in release_workers:
-            hostanmes.append(self.worker_query.ipaddr_to_worker_feature(worker, 'name'))
+        delete_result = self.server.delete(ips)
+        log_check.info(f"{thread_name}-------1st Call HWCloud delete：{delete_result} \n {ips}")
         
-        clean_result = self.worker_query.delete_down_obsworker(hostanmes)
-        log_check.info(f"Call clean up：{clean_result}")
+        hostnames = [self.server.get_hostname(ip) for ip in ips]
+        clean_result = self.worker_query.delete_down_obsworker(hostnames)
+        log_check.info(f"{thread_name}--------2nd Call clean up：{clean_result} \n {hostnames}")
+
+        return delete_result
 
     @property
-    def get_passwd(self):
+    def passwd(self):
         """
         @description :获取worker的初始登录密码
         -----------
@@ -258,22 +294,22 @@ class AutoExtendWorker(object):
             passwd: 密码
         -----------
         """
-        passwd = "**********"
+        password = "**********"
         key = query_config("AES_Decry_Conf", "key")
         decryption_file = query_config("AES_Decry_Conf", "worker_login")
 
         if not os.path.isfile(decryption_file):
             log_check.error("NO decrption file")
-            return passwd
+            return password
         
         aes = AESEncryAndDecry(key, decryption_file)
         decryption_str = aes.decrypt_file
         user_dict = ast.literal_eval(decryption_str)
-        passwd = user_dict.get("passwd")
-        return passwd
+        password = user_dict.get("passwd")
+        return password
 
     @property
-    def get_excluded_workers(self):
+    def excluded_workers(self):
         """
         @description : 获取不在评估是否释放范围内的worker
         -----------
@@ -282,16 +318,20 @@ class AutoExtendWorker(object):
         @returns :
         -----------
         """
-        excluded_workers = []
-        key = query_config("AES_Decry_Conf", "key")
-        decryption_file = query_config("AES_Decry_Conf", "worker_excluded")
+        result_workers = dict()
+        with open(worker_excluded, encoding='utf-8') as f:
+            try:
+                excluded_workers_yaml = yaml.safe_load(f)
+            except yaml.scanner.ScannerError as err:
+                log_check.warning(f"{err}")
+                return result_workers
 
-        if not os.path.isfile(decryption_file):
-            log_check.error("NO decrption file")
-            return excluded_workers
-        
-        aes = AESEncryAndDecry(key, decryption_file)
-        decryption_str = aes.decrypt_file
-        excluded_workers = decryption_str.split('\n')
-        return excluded_workers
+            for arch, workers in excluded_workers_yaml.items():
+                arch_excluded_workers = workers
+                result_workers[arch] = []
+                for worker, attr in arch_excluded_workers.items():
+                    result_workers[arch].append(worker)
+
+        log_check.info(f"excluded_workers: {result_workers}")
+        return result_workers
         
