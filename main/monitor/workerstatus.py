@@ -29,13 +29,6 @@ from libs.log.logger import log_check
 from main.common.executecmd import ExecuteCmd
 from main.common.aes_decode import AESEncryAndDecry
 
-WORKER_INFO_PATH = '/var/tmp/OBS-WSDM/all_obs_worker_info.log'
-INSTANCE_STATISTICS_PATH = '/var/tmp/OBS-WSDM/instance_statistics_tmp.log'
-EMPTY_CMD_LIST = -1
-ENCRYPTED_DATA_PATH = '/usr/obs-wsdm/libs/conf/worker_management_platform_login_info'
-DECRYPT_FILE_PATH = '/usr/obs-wsdm/libs/conf/get_worker_value_login_info'
-DECRYPTION_KEY = 'abcd1234'
-EXECMD = ExecuteCmd()
 
 class QueryOBSWorker(object):
     """
@@ -44,20 +37,9 @@ class QueryOBSWorker(object):
     2.get idle instance distribution
     3.get obs worker list in idle status
     """
-    def __init__(self):
-        """
-        init function 
-        """
-        self.server_dict = {}
-        server = ECSServers()
-        servers_dict = server.list()
-        if servers_dict["code"] == 200:
-            server_list = servers_dict["servers"]
-        for single_machine in server_list:
-            ip_key = single_machine["ip"]
-            self.server_dict[ip_key] = single_machine
     
-    def get_worker_value_name_password(self):
+    @staticmethod
+    def get_worker_value_name_password():
         """
         @description : get worker name and password decrypt file
         -----------
@@ -70,28 +52,66 @@ class QueryOBSWorker(object):
         decryptor = AESEncryAndDecry(DECRYPTION_KEY,DECRYPT_FILE_PATH)
         return decryptor.decrypt_file
         
-    def get_worker_value(self,r_url):
+    @staticmethod
+    def get_monitor_resource(resource,ip,times):
         """
         @description : from url get json value
         -----------
         @param : 
-            r_url : get cpu,mem,IOPS and network from url
+            resource : mem,cpu,network,IOPS
+            ip : ip address
+            times : average time
         -----------
         @returns :
-            str(round(float(requests.post(xxx).json()[x][x][x][x][x][x]
+            str(round(float(requests.post(xxx).json()[x][x][x][x][x][x])))
         ----------
         """
+        instance_ip = ip + ":9100"
+        url_add = "https://openeuler-beijing4-prometheus.osinfra.cn/api/v1/query?query="
+        #cpu
+        url_cpu = f"{url_add}100%20-%20avg(irate(node_cpu_seconds_total{{instance=\"{instance_ip}\",mode=\"idle\"}}[{times}]))by(instance)*100"
+    
+        #mem
+        url_mem = f"{url_add}100%20-%20(node_memory_MemAvailable_bytes{{instance=\"{instance_ip}\"}})%2F(node_memory_MemTotal_bytes{{instance=\"{instance_ip}\"}})*100"
+        #IOPS-read
+        url_read = f"{url_add}max(irate(node_disk_read_bytes_total{{instance=\"{instance_ip}\"}}[{times}]))%20by%20(instance)"
+    
+        #IOPS-write
+        url_write = f"{url_add}max(irate(node_disk_written_bytes_total{{instance=\"{instance_ip}\"}}[{times}]))%20by%20(instance)"
+
+        #network-recive
+        url_recive = f"{url_add}sum(irate(node_network_receive_bytes_total{{instance=\"{instance_ip}\",device!~\"bond.*?|lo\"}}[{times}])/128)by(instance)"
+
+        #network-transmit
+        url_transmit = f"{url_add}sum(irate(node_network_transmit_bytes_total{{instance=\"{instance_ip}\",device!~\"bond.*?|lo\"}}[{times}])/128)by(instance)"
+
+
         headers = {'Content-type':'application/json'}
         data = {"order":2,"index_patterns":["stdout-*"],"settings":{"index":{"max_result_window":"200000"}}}
         result = self.get_worker_value_name_password()
-        username = result.split('\n')[0]
-        password = result.split('\n')[1]
-        r=requests.post(url=r_url,headers=headers,data=json.dumps(data),auth=(username,password))
+        result_cut = result.split('\n')
+        username = result_cut[0]
+        password = result_cut[1]
+        if resource == 'mem':
+            r_url = url_mem
+        elif resource == 'CPU':
+            r_url = url_cpu
+        elif resource == 'IOPS-read':
+            r_url = url_read
+        elif resource == 'IOPS-write':
+            r_url = url_write
+        elif resource == 'NET-recive':
+            r_url = url_recive
+        elif resource == 'NET-transmit':
+            r_url = url_transmit
+        else:
+            return None
+        r=requests.post(url = r_url,headers = headers,data = json.dumps(data),auth = (username,password))
         try:
-            value=str(round(float(r.json()['data']['result'][0]['value'][1]),2))
+            value = str(round(float(r.json()['data']['result'][0]['value'][1]),2))
         except BaseException as e:
-            log_check.error(f'please check your value,due to {e} ')
-            value='0'
+            log_check.error(f'please check your value,due to {e}')
+            value = '0'
         return value
 
     def get_monitor_value(self,ip,times,resource):
@@ -106,26 +126,7 @@ class QueryOBSWorker(object):
         @returns :
             resource_info : cpu,mem,IOPS,network in dictionary  
         """
-        resource_info={}
-        Instance = ip + ":9100"
-        url_add = "https://openeuler-beijing4-prometheus.osinfra.cn/api/v1/query?query="
-        #cpu
-        url_cpu = f"{url_add}100%20-%20avg(irate(node_cpu_seconds_total{{instance=\"{Instance}\",mode=\"idle\"}}[{times}]))by(instance)*100"
-    
-        #mem
-        url_mem = f"{url_add}100%20-%20(node_memory_MemAvailable_bytes{{instance=\"{Instance}\"}})%2F(node_memory_MemTotal_bytes{{instance=\"{Instance}\"}})*100"
-        #IOPS-read
-        url_read = f"{url_add}max(irate(node_disk_read_bytes_total{{instance=\"{Instance}\"}}[{times}]))%20by%20(instance)"
-    
-        #IOPS-write
-        url_write = f"{url_add}max(irate(node_disk_written_bytes_total{{instance=\"{Instance}\"}}[{times}]))%20by%20(instance)"
-
-        #network-recive
-        url_recive = f"{url_add}sum(irate(node_network_receive_bytes_total{{instance=\"{Instance}\",device!~\"bond.*?|lo\"}}[{times}])/128)by(instance)"
-
-        #network-transmit
-        url_transmit = f"{url_add}sum(irate(node_network_transmit_bytes_total{{instance=\"{Instance}\",device!~\"bond.*?|lo\"}}[{times}])/128)by(instance)"
-
+        resource_info = {}
         resource_info['IP'] = ip
         resource_info['times'] = times
         times_check = re.findall(r'\d+m$',times)
@@ -137,21 +138,38 @@ class QueryOBSWorker(object):
         else:
             log_check.error(f'times error')
             return resource_info
-             
-        if resource == 'all' or resource == 'mem':
-            resource_info['mem']=self.get_worker_value(r_url=url_mem)+'%'
-        if resource == 'all' or resource == 'CPU':   
-            resource_info['CPU']=self.get_worker_value(r_url=url_cpu)+'%'
-        if resource == 'all' or resource == 'IOPS':
-            resource_info['IOPS-read']=self.get_worker_value(r_url=url_read)+'kb/s'
-            resource_info['IOPS-write']=self.get_worker_value(r_url=url_write)+'kb/s'
-        if resource == 'all' or resource == 'net':
-            resource_info['NET-recive']=self.get_worker_value(r_url=url_recive)+'kb/s'
-            resource_info['NET-transmit']=self.get_worker_value(r_url=url_transmit)+'kb/s'        
+        mem = self.get_monitor_resource('mem',ip,times)
+        cpu = self.get_monitor_resource('CPU',ip,times)
+        iops_read = self.get_monitor_resource('IOPS-read',ip,times)
+        iops_write = self.get_monitor_resource('IOPS-write',ip,times)
+        net_recive = self.get_monitor_resource('NET-recive',ip,times)
+        net_transmit = self.get_monitor_resource('NET-transmit',ip,times)
+        
+        if resource == 'all':
+            resource_info['mem'] = mem + '%'
+            resource_info['CPU'] = cpu + '%'
+            resource_info['IOPS-read'] = iops_read + 'kb/s'
+            resource_info['IOPS-write'] = iops_write + 'kb/s'
+            resource_info['NET-recive'] = net_recive + 'kb/s'
+            resource_info['NET-transmit'] = net_transmit + 'kb/s'        
+        elif resource == 'CPU':
+            resource_info[resource] = cpu + '%'
+        elif resource == 'mem':
+            resource_info[resource] = mem + '%'
+        elif resource == 'IOPS-read':
+            resource_info[resource] = iops_read + 'kb/s'
+        elif resource == 'IOPS-write':
+            resource_info[resource] = iops_write + 'kb/s'
+        elif resource == 'NET-recive':
+            resource_info[resource] = net_recive + 'kb/s'
+        elif resource == 'NET-transmit':
+            resource_info[resource] = net_transmit + 'kb/s'
+        else:
+            return resource_info
         return resource_info
 
 
-    def get_all_worker_ip(self):
+    def get_all_worker_list(self):
         """
         @description : get a list shows all workers and is divided arch and x86
         ------------
@@ -163,7 +181,12 @@ class QueryOBSWorker(object):
         obs_worker_list = [{"aarch64":[]},{"x86":[]}]
         server = ECSServers()
         server_list = server.list()
-        for i in range(0, len(server_list['servers'])):
+        if server_list['code'] != 200:
+            log_check.error(f'not exist this obs_worker_list')
+            return server_list['error']
+        else:
+            pass
+        for i in range(len(server_list['servers'])):
             if server_list['servers'][i]['arch'] == 'aarch64':
                 obs_worker_list[0]["aarch64"].append(server_list['servers'][i]['ip'])
             else:
@@ -184,11 +207,13 @@ class QueryOBSWorker(object):
         try:
             server = ECSServers()
             server_ip = server.get(ip)
-    
-            """
-            find ip and status from the server_ip
-            """
-            machine_status={'ip':server_ip['server']['ip'],'status':server_ip['server']['status']}
+            if server_ip['code'] != 200:
+                log_check.error(f'this ip is not exist')
+                return server_ip['error']
+            else:
+                pass
+            
+            machine_status = {'ip':server_ip['server']['ip'],'status':server_ip['server']['status']}
             return machine_status
         except BaseException as e:
             log_check.error(f'this IP is not exist,due to {e}')
@@ -206,19 +231,20 @@ class QueryOBSWorker(object):
             service_state:a dictionary about ip and status
         """
         service_state = dict()
-        service_state["ip"]=ip
+        service_state["ip"] = ip
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         try:
             client.connect(
-                hostname=ip,
-                username='root',
-                password=passwd,
-                timeout=5
+                hostname = ip,
+                username = 'root',
+                password = passwd,
+                timeout = 5
                 )
             stdin,stdout,stderr = client.exec_command('systemctl status obsworker')
         except BaseException as e:
             log_check.error(f"Not connect this ip,please check password or ip,due to {e}")
+            client.close()
             return None
         str_obs = stdout.read().decode('utf-8')
 
@@ -228,6 +254,7 @@ class QueryOBSWorker(object):
             str_obs = str_obs[0]
         except BaseException as e:
             log_check.error(f"Not find obsservice,due to {e}")
+            client.close()
             return None
         if str_obs == "active":
             service_state["service_OK"] = "0"
