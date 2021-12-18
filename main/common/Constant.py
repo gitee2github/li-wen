@@ -17,7 +17,7 @@
 """
 
 #directory path constant
-HISTORY_LOG_PATH = '/var/tmp/OBS-WSDM/getbuildtime_history.log'
+HISTORY_LOG_PATH = '/var/tmp/li-wen/getbuildtime_history.log'
 
 #value constant
 BUILD_TIME_ITEM_LEN = 17

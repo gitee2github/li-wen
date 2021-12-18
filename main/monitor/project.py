@@ -53,9 +53,9 @@ class QueryProject(object):
         """
         currpath = os.path.dirname(os.path.realpath(__file__))
         path_list = currpath.split('/')
-        if not 'obs-wsdm' in path_list:
+        if not 'li-wen' in path_list:
             return None
-        proj_index = path_list.index('obs-wsdm')
+        proj_index = path_list.index('li-wen')
         parentpath = '/'
         for index in range(1, proj_index + 1):
             parentpath = os.path.join(parentpath, path_list[index])
