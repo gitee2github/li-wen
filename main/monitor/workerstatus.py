@@ -24,6 +24,7 @@ import time
 import subprocess
 import base64
 import json
+import socket
 from libs.cloud.HWCloud.ecs_servers import ECSServers
 from libs.log.logger import log_check
 from main.common.executecmd import ExecuteCmd
@@ -108,7 +109,11 @@ class QueryOBSWorker(object):
             return None
         r=requests.post(url = r_url,headers = headers,data = json.dumps(data),auth = (username,password))
         try:
-            value = str(round(float(r.json()['data']['result'][0]['value'][1]),2))
+            resource_value = str(round(float(r.json()['data']['result'][0]['value'][1]),2))
+            if resource == 'mem' or resource == 'CPU':
+                value = resource_value + '%'
+            else:
+                value = resource_value + 'kb/s'
         except BaseException as e:
             log_check.error(f'please check your value,due to {e}')
             value = '0'
@@ -138,34 +143,16 @@ class QueryOBSWorker(object):
         else:
             log_check.error(f'times error')
             return resource_info
-        mem = self.get_monitor_resource('mem',ip,times)
-        cpu = self.get_monitor_resource('CPU',ip,times)
-        iops_read = self.get_monitor_resource('IOPS-read',ip,times)
-        iops_write = self.get_monitor_resource('IOPS-write',ip,times)
-        net_recive = self.get_monitor_resource('NET-recive',ip,times)
-        net_transmit = self.get_monitor_resource('NET-transmit',ip,times)
         
         if resource == 'all':
-            resource_info['mem'] = mem + '%'
-            resource_info['CPU'] = cpu + '%'
-            resource_info['IOPS-read'] = iops_read + 'kb/s'
-            resource_info['IOPS-write'] = iops_write + 'kb/s'
-            resource_info['NET-recive'] = net_recive + 'kb/s'
-            resource_info['NET-transmit'] = net_transmit + 'kb/s'        
-        elif resource == 'CPU':
-            resource_info[resource] = cpu + '%'
-        elif resource == 'mem':
-            resource_info[resource] = mem + '%'
-        elif resource == 'IOPS-read':
-            resource_info[resource] = iops_read + 'kb/s'
-        elif resource == 'IOPS-write':
-            resource_info[resource] = iops_write + 'kb/s'
-        elif resource == 'NET-recive':
-            resource_info[resource] = net_recive + 'kb/s'
-        elif resource == 'NET-transmit':
-            resource_info[resource] = net_transmit + 'kb/s'
+            resource_info['mem'] = self.get_monitor_resource('mem',ip,times)
+            resource_info['CPU'] = self.get_monitor_resource('CPU',ip,times)
+            resource_info['IOPS-read'] = self.get_monitor_resource('IOPS-read',ip,times)
+            resource_info['IOPS-write'] = self.get_monitor_resource('IOPS-write',ip,times)
+            resource_info['NET-recive'] = self.get_monitor_resource('NET-recive',ip,times)
+            resource_info['NET-transmit'] = self.get_monitor_resource('NET-transmit',ip,times)       
         else:
-            return resource_info
+            resource_info[resource] = self.get_monitor_resource(resource,ip,times)
         return resource_info
 
 
@@ -178,7 +165,7 @@ class QueryOBSWorker(object):
         @returns : 
             obs_worker_list : a list shows all workers and is divided arch and x86
         """
-        obs_worker_list = [{"aarch64":[]},{"x86":[]}]
+        obs_worker_list = {"aarch64":[],"x86":[]}
         server = ECSServers()
         server_list = server.list()
         if server_list['code'] != 200:
@@ -188,9 +175,9 @@ class QueryOBSWorker(object):
             pass
         for i in range(len(server_list['servers'])):
             if server_list['servers'][i]['arch'] == 'aarch64':
-                obs_worker_list[0]["aarch64"].append(server_list['servers'][i]['ip'])
+                obs_worker_list["aarch64"].append(server_list['servers'][i]['ip'])
             else:
-                obs_worker_list[1]["x86"].append(server_list['servers'][i]['ip'])
+                obs_worker_list["x86"].append(server_list['servers'][i]['ip'])
         return obs_worker_list
 
 
@@ -242,20 +229,14 @@ class QueryOBSWorker(object):
                 timeout = 5
                 )
             stdin,stdout,stderr = client.exec_command('systemctl status obsworker')
-        except BaseException as e:
+        except socket.timeout as e:
             log_check.error(f"Not connect this ip,please check password or ip,due to {e}")
             client.close()
             return None
         str_obs = stdout.read().decode('utf-8')
-
-        try:
-            str_obs = str_obs.split("Active: ")
-            str_obs = str_obs[1].split(" ")
-            str_obs = str_obs[0]
-        except BaseException as e:
-            log_check.error(f"Not find obsservice,due to {e}")
-            client.close()
-            return None
+        str_obs = str_obs.split("Active: ")
+        str_obs = str_obs[1].split(" ")
+        str_obs = str_obs[0]
         if str_obs == "active":
             service_state["service_OK"] = "0"
         else:
