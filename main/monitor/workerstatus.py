@@ -25,7 +25,7 @@ import subprocess
 import base64
 import json
 import socket
-from libs.cloud.HWCloud.ecs_servers import ECSServers
+from libs.cloud.HWCloud.ecs_servers import ecs_server
 from libs.log.logger import log_check
 from main.common.executecmd import ExecuteCmd
 from main.common.aes_decode import AESEncryAndDecry
@@ -166,8 +166,7 @@ class QueryOBSWorker(object):
             obs_worker_list : a list shows all workers and is divided arch and x86
         """
         obs_worker_list = {"aarch64":[],"x86":[]}
-        server = ECSServers()
-        server_list = server.list()
+        server_list = ecs_server.list_servers()
         if server_list['code'] != 200:
             log_check.error(f'not exist this obs_worker_list')
             return server_list['error']
@@ -192,8 +191,7 @@ class QueryOBSWorker(object):
             machine_status : a dictionary about ip and status   
         """
         try:
-            server = ECSServers()
-            server_ip = server.get(ip)
+            server_ip = ecs_server.get_server(ip)
             if server_ip['code'] != 200:
                 log_check.error(f'this ip is not exist')
                 return server_ip['error']
