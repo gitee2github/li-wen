@@ -1,0 +1,275 @@
+# 地区
+region: cn-north-4
+
+# 服务器名称前缀
+name_prefix: obs-worker
+
+# 项目的唯一标识,和地区相关
+projectId: 0612bce5650026c12fbcc01710fb0df4
+
+# 待创建云服务器所属虚拟私有云的ID
+vpcId: 50ea76d8-a77b-4f3d-be88-952cd9258437
+
+# 待创建云服务器所在的子网信息,需要指定vpcid对应VPC下的子网ID
+subnetId: e0735f1d-1910-4a88-aad3-ca55b9563058
+
+# 安全组ID
+security_group_id: 5488870e-0623-414c-bb21-5067f400b455
+
+# 云服务器系统盘对应的磁盘类型, [SATA(普通IO磁盘类型), SAS(高IO磁盘类型), SSD(超高IO磁盘类型)]
+volumetype: SSD
+
+# 创建云服务器后使用id查询ip每次等待时间(单位：秒)
+waiting_time: 10
+
+# 创建云服务器后使用id查询ip的次数
+query_times: 18
+
+# 服务器启动时间(单位：秒)
+server_boot_time: 60
+
+# 云服务器允许的最大容量，当申请创建的数量超过剩余容量则不再创建
+max_servers_number: 500
+
+# 列表查询的最大数
+max_list_number: 1000
+
+# 规格映射
+flavorMapping:
+  x86:
+      imageRef: 48a55ffa-4706-4220-b51f-ce2190a6c04f
+      l1: c6s.4xlarge.2
+      l2: c6s.8xlarge.2
+      l3: c6s.16xlarge.2
+  aarch64:
+      # 基于EulerOS 2.8生成的obs-worker镜像
+      imageRef: 33523d8a-a259-4c68-8229-b34e27175f47
+      l1: ki1.4xlarge.4
+      l2: ki1.8xlarge.4
+      l3: ki1.16xlarge.4
+
+# 架构映射
+archMapping:
+  x86:
+    - c6s.large.2
+    - c6s.xlarge.2
+    - c6s.2xlarge.2
+    - c6s.3xlarge.2
+    - c6s.4xlarge.2
+    - c6s.6xlarge.2
+    - c6s.8xlarge.2
+    - c6s.12xlarge.2
+    - c6s.16xlarge.2
+    - c6.large.2
+    - c6.large.4
+    - c6.xlarge.2
+    - c6.xlarge.4
+    - c6.2xlarge.2
+    - c6.2xlarge.4
+    - c6.3xlarge.2
+    - c6.3xlarge.4
+    - c6.4xlarge.2
+    - c6.4xlarge.4
+    - c6.6xlarge.2
+    - c6.6xlarge.4
+    - c6.8xlarge.2
+    - c6.8xlarge.4
+    - c6.12xlarge.2
+    - c6.12xlarge.4
+    - c6.16xlarge.2
+    - c6.16xlarge.4
+    - c6.22xlarge.2
+    - c6.22xlarge.2.physica
+    - c6.22xlarge.4
+    - c6.22xlarge.4.physical
+    - c7.large.2
+    - c7.large.4
+    - c7.xlarge.2
+    - c7.xlarge.4
+    - c7.2xlarge.2
+    - c7.2xlarge.4
+    - c7.3xlarge.2
+    - c7.3xlarge.4
+    - c7.4xlarge.2
+    - c7.4xlarge.4
+    - c7.6xlarge.2
+    - c7.6xlarge.4
+    - c7.8xlarge.2
+    - c7.8xlarge.4
+    - c7.12xlarge.2
+    - c7.12xlarge.4
+    - c7.16xlarge.2
+    - c7.16xlarge.4
+    - c7.24xlarge.2
+    - c7.24xlarge.4
+    - c7.32xlarge.2
+    - c7.32xlarge.4
+    - c3ne.large.2
+    - c3ne.large.4
+    - c3ne.xlarge.2
+    - c3ne.xlarge.4
+    - c3ne.2xlarge.2
+    - c3ne.2xlarge.4
+    - c3ne.4xlarge.2
+    - c3ne.4xlarge.4
+    - c3ne.8xlarge.2
+    - c3ne.8xlarge.4
+    - c3ne.15xlarge.2
+    - c3ne.15xlarge.4
+    - s6.small.1
+    - s6.medium.2
+    - s6.medium.4
+    - s6.large.2
+    - s6.large.4
+    - s6.xlarge.2
+    - s6.xlarge.4
+    - s6.2xlarge.2
+    - s6.2xlarge.4
+    - sn3.small.1
+    - sn3.medium.2
+    - sn3.medium.4
+    - sn3.large.2
+    - sn3.large.4
+    - sn3.xlarge.2
+    - sn3.xlarge.4
+    - sn3.2xlarge.2
+    - sn3.2xlarge.4
+    - sn3.4xlarge.2
+    - sn3.4xlarge.4
+    - m6.large.8
+    - m6.xlarge.8
+    - m6.2xlarge.8
+    - m6.3xlarge.8
+    - m6.4xlarge.8
+    - m6.6xlarge.8
+    - m6.8xlarge.8
+    - m6.16xlarge.8
+    - m6.22xlarge.8.physical
+    - m3ne.large.8
+    - m3ne.xlarge.8
+    - m3ne.2xlarge.8
+    - m3ne.3xlarge.8
+    - m3ne.4xlarge.8
+    - m3ne.6xlarge.8
+    - m3ne.8xlarge.8
+    - m3ne.15xlarge.8
+    - e3.7xlarge.12
+    - e3.14xlarge.12
+    - e3.26xlarge.14
+    - e3.52xlarge.14
+    - d6.xlarge.4
+    - d6.2xlarge.4
+    - d6.4xlarge.4
+    - d6.6xlarge.4
+    - d6.8xlarge.4
+    - d6.12xlarge.4
+    - d6.16xlarge.4
+    - d6.18xlarge.4
+    - d3.xlarge.8
+    - d3.2xlarge.8
+    - d3.4xlarge.8
+    - d3.6xlarge.8
+    - d3.8xlarge.8
+    - d3.12xlarge.8
+    - d3.14xlarge.10
+    - ir3.large.4
+    - ir3.xlarge.4
+    - ir3.2xlarge.4
+    - ir3.4xlarge.4
+    - ir3.8xlarge.4
+    - i3.2xlarge.8
+    - i3.4xlarge.8
+    - i3.8xlarge.8
+    - i3.12xlarge.8
+    - i3.15xlarge.8
+    - i3.16xlarge.8
+    - p2vs.2xlarge.8
+    - p2vs.4xlarge.8
+    - p2vs.8xlarge.8
+    - p2vs.16xlarge.8
+    - p2v.2xlarge.8
+    - p2v.4xlarge.8
+    - p2v.8xlarge.8
+    - p2v.16xlarge.8
+    - g6v.2xlarge.2
+    - g6v.2xlarge.4
+    - g6v.4xlarge.4
+    - g6.xlarge.4
+    - g6.4xlarge.4
+    - g6.6xlarge.4
+    - g6.9xlarge.7
+    - g6.18xlarge.7
+    - g5.8xlarge.4
+    - pi2.2xlarge.4
+    - pi2.4xlarge.4
+    - pi2.8xlarge.4
+    - pi1.2xlarge.4
+    - pi1.4xlarge.4
+    - pi1.8xlarge.4
+    - ai1s.large.4
+    - ai1s.xlarge.4
+    - ai1s.2xlarge.4
+    - ai1s.4xlarge.4
+    - ai1s.8xlarge.4
+    - ai1.large.4
+    - ai1.xlarge.4
+    - ai1.2xlarge.4
+    - ai1.4xlarge.4
+    - ai1.8xlarge.4
+    - t6.small.1
+    - t6.medium.2
+    - t6.large.1
+    - t6.large.2
+    - t6.large.4
+    - t6.xlarge.1
+    - t6.xlarge.2
+    - t6.xlarge.4
+    - t6.2xlarge.1
+    - t6.2xlarge.2
+    - t6.2xlarge.4
+    - t6.4xlarge.1
+    - t6.4xlarge.2
+  aarch64:
+    - kai1s.xlarge.1
+    - kai1s.2xlarge.1
+    - kai1s.3xlarge.2
+    - kai1s.4xlarge.1
+    - kai1s.4xlarge.2
+    - kai1s.6xlarge.2
+    - kai1s.9xlarge.2
+    - kai1s.12xlarge.2
+    - kc1.small.1
+    - kc1.large.2
+    - kc1.large.4
+    - kc1.xlarge.2
+    - kc1.xlarge.4
+    - kc1.2xlarge.2
+    - kc1.2xlarge.4
+    - kc1.3xlarge.2
+    - kc1.3xlarge.4
+    - kc1.4xlarge.2
+    - kc1.4xlarge.4
+    - kc1.6xlarge.2
+    - kc1.6xlarge.4
+    - kc1.8xlarge.2
+    - kc1.8xlarge.4
+    - kc1.12xlarge.2
+    - kc1.12xlarge.4
+    - kc1.15xlarge.2
+    - km1.large.8
+    - km1.xlarge.8
+    - km1.2xlarge.8
+    - km1.3xlarge.8
+    - km1.4xlarge.8
+    - km1.6xlarge.8
+    - km1.8xlarge.8
+    - km1.12xlarge.8
+    - km1.15xlarge.8
+    - ki1.2xlarge.4
+    - ki1.4xlarge.4
+    - ki1.6xlarge.4
+    - ki1.8xlarge.4
+    - ki1.12xlarge.4
+    - ki1.16xlarge.4
+    - physical.ks1.2xlarge
+
