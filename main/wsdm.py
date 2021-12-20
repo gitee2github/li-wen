@@ -24,7 +24,7 @@ import configparser
 from logging import log
 import time
 from libs.conf import global_config
-from libs.cloud.HWCloud.ecs_servers import ECSServers
+from libs.cloud.HWCloud.ecs_servers import ecs_server
 from main.core.auto_extend import AutoExtendWorker
 from main.monitor.workerstatus import QueryOBSWorker
 from main.monitor.project import QueryProject
@@ -35,8 +35,11 @@ interval_for_check_schedule = int(query_config("Monitor", "interval_for_check_sc
 interval_for_cycle_check_new_worker = int(query_config("Monitor", "interval_for_cycle_check_new_worker"))
 num_for_check_reserved_worker = int(query_config("Monitor", "num_for_check_reserved_worker"))
 interval_for_check_reserved_worker = int(query_config("Monitor", "interval_for_check_reserved_worker"))
+# 获取当前关联的project列表
+projects = query_config("Monitor", "projects").split()
+# 获取project所属的backend
+repo_server = query_config("Monitor", "repo_server")
 
-server = ECSServers()
 obs_worker = QueryOBSWorker()
 project = QueryProject()
 auto_extend_worker = AutoExtendWorker()
@@ -93,6 +96,7 @@ def check_worker_enable(workers, passwd, interval, checK_start):
                 wait_for_check_config["ram"] = worker.get("ram")
                 wait_for_check_config["jobs"] = worker.get("jobs")
                 wait_for_check_config["instances"] = worker.get("instances")
+                wait_for_check_config["repo_server"] = repo_server
             except (AttributeError, KeyError) as err:
                 log_check.error(f"reason: {err}")
                 continue
@@ -161,22 +165,20 @@ def main_progrecess():
     """
     主函数入口
     """
-    test_num = 1
+    test_num = 0
 
     while True:
-        log_check.debug(f"======================WSDM Start : {test_num}")
+        test_num += 1
+        log_check.debug(f"======================WSDM Start : {test_num}======================")
         # 开始计时
         start = time.monotonic()
 
         # 获取ECSServers().list返回的所欲worker 信息列表
-        HWCloud_workers = server.list().get('servers')
+        HWCloud_workers = ecs_server.list_servers().get('servers')
         save_workers_info(HWCloud_workers, "cur", global_config.CURRENT_WORKERS_INFO, 'w')
 
         # 获取当前生产环境的所有worker ip列表
-        obs_worker_list = obs_worker.get_all_worker_ip()
-
-        # 获取当前关联的project列表
-        projects = query_config("Monitor", "projects").split()
+        obs_workers_ip = obs_worker.get_all_worker_ip()
 
         # 获取 project中schedule状态的不同构建时长级别的统计结果
         schedule_events_list = project.query_schedule_statistics(projects)
@@ -187,7 +189,7 @@ def main_progrecess():
             log_check.info(f"++++++++++++++We have schedule events, then cacluate workers to apply!++++++++++++")
 
             # 获取当前生产环境中的worker中处于idle状态的instance數量统计结果
-            idle_instances_list = obs_worker.query_idle_instance(obs_worker_list)
+            idle_instances_list = obs_worker.query_idle_instance(obs_workers_ip)
             log_check.info(f"Get realtime idle instances: {idle_instances_list}")
 
             # 获取worker默认的登录密码
@@ -222,9 +224,11 @@ def main_progrecess():
             if not result:
                 log_check.error(f"No worker info file, stop release!")
                 continue
+
+            log_check.info("Initial all_obs_worker_info.log succeeded!")
             
             # 初步筛选处于idle状态的worker ip列表
-            idle_workers = obs_worker.query_idle_worker_ip(obs_worker_list)
+            idle_workers = obs_worker.query_idle_worker_ip(obs_workers_ip)
             log_check.info(f"Idle workers: {idle_workers}")
 
             # 评估长时间处于idle状态的worker，释放并清理
@@ -233,7 +237,6 @@ def main_progrecess():
             
             log_check.info(f"-------------Idle workers {result_release}!-------------")
 
-        test_num += 1
         
 
 if __name__ == '__main__':
