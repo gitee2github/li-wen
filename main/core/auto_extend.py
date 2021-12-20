@@ -270,10 +270,6 @@ class AutoExtendWorker(object):
             delete_result：释放返回结果
         -----------
         """
-        #########
-        ips = []
-        ############
-
         delete_result = self.server.delete(ips)
         log_check.info(f"{thread_name}-------1st Call HWCloud delete：{delete_result} \n {ips}")
         
