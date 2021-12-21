@@ -53,7 +53,7 @@ class QueryOBSWorker(object):
         decryptor = AESEncryAndDecry(DECRYPTION_KEY,DECRYPT_FILE_PATH)
         return decryptor.decrypt_file
         
-    def get_monitor_resource(resource,ip,times):
+    def get_monitor_resource(self,resource,ip,times):
         """
         @description : from url get json value
         -----------
@@ -296,12 +296,7 @@ class QueryOBSWorker(object):
                     consistency_result = True
                 else:
                     consistency_result = False
-            except KeyError as e:
-                log_check.error(f'error due to {e}')
-                consistency_result = False
-                client.close()
-                return consistency_result
-            except AttributeError as e:
+            except KeyError or AttributeError as e:
                 log_check.error(f'error due to {e}')
                 consistency_result = False
                 client.close()
