@@ -270,10 +270,11 @@ class AutoExtendWorker(object):
             delete_result：释放返回结果
         -----------
         """
+        hostnames = [self.server.get_hostname(ip) for ip in ips]
+
         delete_result = self.server.delete(ips)
         log_check.info(f"{thread_name}-------1st Call HWCloud delete：{delete_result} \n {ips}")
         
-        hostnames = [self.server.get_hostname(ip) for ip in ips]
         clean_result = self.worker_query.delete_down_obsworker(hostnames)
         log_check.info(f"{thread_name}--------2nd Call clean up：{clean_result} \n {hostnames}")
 
