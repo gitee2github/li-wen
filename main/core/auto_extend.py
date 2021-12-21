@@ -76,7 +76,7 @@ class AutoExtendWorker(object):
                     continue
 
                 default_instances = query_config(self.worker_conf[level_idx], "instances")
-                max_limit = query_config(self.worker_conf[level_idx], "max_limit")
+                max_limit = int(query_config(self.worker_conf[level_idx], "max_limit"))
 
                 # 计算得到预申请的数目
                 if schedule <= idle: 
