@@ -53,7 +53,6 @@ class QueryOBSWorker(object):
         decryptor = AESEncryAndDecry(DECRYPTION_KEY,DECRYPT_FILE_PATH)
         return decryptor.decrypt_file
         
-    @staticmethod
     def get_monitor_resource(resource,ip,times):
         """
         @description : from url get json value
@@ -242,6 +241,16 @@ class QueryOBSWorker(object):
         client.close()
         return service_state
 
+    def get_worker_config_value(self,str_worker_value,config_value_cut):
+        try:
+            str_value = str_worker_value.split(config_value_cut)
+            str_value = str_value[1].split("\"")
+            str_value = str_value[0]
+        except IndexError as e:
+            log_check.error(f'get error due to {e}')
+            return None
+        return str_value
+
     def check_worker_config(self,ip,passwd,config):
         """
         @description : check worker config is it consistent
@@ -266,25 +275,20 @@ class QueryOBSWorker(object):
             get the values of jobs and instances from obs-server
             """
             stdin,stdout,stderr = client.exec_command("cat /etc/sysconfig/obs-server")
-        except BaseException as e:
+        except socket.timeout as e:
             log_check.error(f'Not connect this IP.due to {e}')
-            return None
-        str_ins = stdout.read().decode('utf-8')
-        str_jobs = str_ins
-        str_repo_servers = str_ins
-        str_ins = str_ins.split("\nOBS_WORKER_INSTANCES=\"")
-        str_ins = str_ins[1].split("\"")
-        str_ins = str_ins[0]
-        str_jobs = str_jobs.split("\nOBS_WORKER_JOBS=\"")
-        str_jobs = str_jobs[1].split("\"")
-        str_jobs = str_jobs[0]
-        str_repo_servers = str_repo_servers.split("\nOBS_REPO_SERVERS=\"")
-        str_repo_servers = str_repo_servers[1].split("\"")
-        str_repo_servers = str_repo_servers[0]
+            client.close()
+            consistency_result = False
+            return consistency_result
+        str_value = stdout.read().decode('utf-8')
+        str_ins = self.get_worker_config_value(str_value,"\nOBS_WORKER_INSTANCES=\"")
+        str_jobs = self.get_worker_config_value(str_value,"\nOBS_WORKER_JOBS=\"")
+        str_repo_servers = self.get_worker_config_value(str_value,"\nOBS_REPO_SERVERS=\"")
         server_get = ecs_server.get_server(ip)
         if server_get["code"] != 200:
             log_check.error(f'get server information from {ip} failed')
             consistency_result = False
+            client.close()
             return consistency_result
         if str_ins == config['instances'] and str_jobs == config['jobs'] and str_repo_servers == config['repo_server']:
             try:
@@ -292,9 +296,15 @@ class QueryOBSWorker(object):
                     consistency_result = True
                 else:
                     consistency_result = False
-            except BaseException as e:
-                log_check.error(f'No this IP,due to {e}')
+            except KeyError as e:
+                log_check.error(f'error due to {e}')
                 consistency_result = False
+                client.close()
+                return consistency_result
+            except AttributeError as e:
+                log_check.error(f'error due to {e}')
+                consistency_result = False
+                client.close()
                 return consistency_result
         else:
             try:
