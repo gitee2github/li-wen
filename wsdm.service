@@ -1,0 +1,16 @@
+[Unit]
+Description=wsdm —— dynamic manage worker server  ——— /var/log/obs-wsdm/
+After=network.target
+StartLimitIntervalSec=0
+
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/python3 /usr/li-wen/main/wsdm.py
+User=root
+Group=root
+Restart=always
+RestartSec=1
+
+[Install]
+WantedBy=multi-user.target

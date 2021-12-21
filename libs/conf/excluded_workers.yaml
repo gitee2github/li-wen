@@ -1,0 +1,9 @@
+
+x86:
+    xx.xx.xx.xx:
+        name: ecs-obsworker-xxxx
+        vcpus: 16/32/64
+aarch64:
+    xx.xx.xx.xx:
+        name: obs-obsworker-xxxx
+        vcpus: 16/32/64

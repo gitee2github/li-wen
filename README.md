@@ -1,7 +1,7 @@
 # li-wen
 
 #### 介绍
-Tool for dynamic management of worker resources in OBS-Build system
+一款为OBS构建系统设置的自动管理（扩展和释放）worker资源的工具
 
 #### 软件架构
 aarch64 和 x86_64
@@ -9,8 +9,9 @@ aarch64 和 x86_64
 
 #### 安装教程
 
-1.  clone 仓库到/usr/
-2.  将service文件拷贝到 /usr/lib/systemd/system
+1.  clone 仓库到/usr/目录；
+2.  将wsdm.service文件拷贝到 /usr/lib/systemd/system, 并在Environment中配置IAM_PASSWORD、IAM_USER和IAM_DOMAIN(与对接云资源厂商的基础设施团队确认，当前是华为云)；
+3.  配置excluded_workers.yaml，格式如文件中所示；
 
 #### 使用说明
 
