@@ -242,3 +242,79 @@ class QueryOBSWorker(object):
         client.close()
         return service_state
 
+    def check_worker_config(self,ip,passwd,config):
+        """
+        @description : check worker config is it consistent
+        -------------
+        @param : 
+            ip : ip address
+            passwd : ip address password
+            config : a dectionary about jobs,instances,vcpus,ram
+        @returns : 
+            consistency_result : is it consistent true or false
+        """
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname=ip,
+                username='root',
+                password=passwd,
+                timeout=5
+                )
+            """
+            get the values of jobs and instances from obs-server
+            """
+            stdin,stdout,stderr = client.exec_command("cat /etc/sysconfig/obs-server")
+        except BaseException as e:
+            log_check.error(f'Not connect this IP.due to {e}')
+            return None
+        str_ins = stdout.read().decode('utf-8')
+        str_jobs = str_ins
+        str_repo_servers = str_ins
+        str_ins = str_ins.split("\nOBS_WORKER_INSTANCES=\"")
+        str_ins = str_ins[1].split("\"")
+        str_ins = str_ins[0]
+        str_jobs = str_jobs.split("\nOBS_WORKER_JOBS=\"")
+        str_jobs = str_jobs[1].split("\"")
+        str_jobs = str_jobs[0]
+        str_repo_servers = str_repo_servers.split("\nOBS_REPO_SERVERS=\"")
+        str_repo_servers = str_repo_servers[1].split("\"")
+        str_repo_servers = str_repo_servers[0]
+        server_get = ecs_server.get_server(ip)
+        if server_get["code"] != 200:
+            log_check.error(f'get server information from {ip} failed')
+            consistency_result = False
+            return consistency_result
+        if str_ins == config['instances'] and str_jobs == config['jobs'] and str_repo_servers == config['repo_server']:
+            try:
+                if config['vcpus'] == server_get['server']['flavor']['vcpus'] and config['ram'] == server_get['server']['flavor']['ram']:
+                    consistency_result = True
+                else:
+                    consistency_result = False
+            except BaseException as e:
+                log_check.error(f'No this IP,due to {e}')
+                consistency_result = False
+                return consistency_result
+        else:
+            try:
+                origin_instance_content = 'OBS_WORKER_INSTANCES="' + str_ins + '"'
+                origin_jobs_content = 'OBS_WORKER_JOBS="' + str_jobs + '"'
+                origin_repo_servers_content = 'OBS_REPO_SERVERS="' + str_repo_servers + '"'
+                client_modify_instance_cmd = "sed -i 's/" + origin_instance_content + "/OBS_WORKER_INSTANCES=\"" + config['instances'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command(client_modify_instance_cmd)
+                client_modify_jobs_cmd = "sed -i 's/" + origin_jobs_content + "/OBS_WORKER_JOBS=\"" + config['jobs'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command(client_modify_jobs_cmd)
+                client_modify_repo_servers_cmd = "sed -i 's/" + origin_repo_servers_content + "/OBS_REPO_SERVERS=\"" + config['instances'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command('systemctl restart obsworker')
+                worker_name = server_get["server"]["name"]
+                dest_instance = config['instances']
+                dest_jobs = config['jobs']
+                dest_repo_servers = config['repo_server']
+                log_check.info(f'worker:{worker_name}, ip:{ip}, change instance / jobs / repo_server form {str_ins} / {str_jobs} / {str_repo_servers} to {dest_instance} / {dest_jobs} / {dest_repo_servers}')
+                consistency_result = True
+            except BaseException as e:
+                log_check.error(f'error due to {e}')
+                consistency_result = False
+        client.close()
+        return consistency_result           
