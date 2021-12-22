@@ -53,8 +53,7 @@ class QueryOBSWorker(object):
         decryptor = AESEncryAndDecry(DECRYPTION_KEY,DECRYPT_FILE_PATH)
         return decryptor.decrypt_file
         
-    @staticmethod
-    def get_monitor_resource(resource,ip,times):
+    def get_monitor_resource(self,resource,ip,times):
         """
         @description : from url get json value
         -----------
@@ -242,3 +241,85 @@ class QueryOBSWorker(object):
         client.close()
         return service_state
 
+    def get_worker_config_value(self,str_worker_value,config_value_cut):
+        try:
+            str_value = str_worker_value.split(config_value_cut)
+            str_value = str_value[1].split("\"")
+            str_value = str_value[0]
+        except IndexError as e:
+            log_check.error(f'get error due to {e}')
+            return None
+        return str_value
+
+    def check_worker_config(self,ip,passwd,config):
+        """
+        @description : check worker config is it consistent
+        -------------
+        @param : 
+            ip : ip address
+            passwd : ip address password
+            config : a dectionary about jobs,instances,vcpus,ram
+        @returns : 
+            consistency_result : is it consistent true or false
+        """
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname=ip,
+                username='root',
+                password=passwd,
+                timeout=5
+                )
+            """
+            get the values of jobs and instances from obs-server
+            """
+            stdin,stdout,stderr = client.exec_command("cat /etc/sysconfig/obs-server")
+        except socket.timeout as e:
+            log_check.error(f'Not connect this IP.due to {e}')
+            client.close()
+            consistency_result = False
+            return consistency_result
+        str_value = stdout.read().decode('utf-8')
+        str_ins = self.get_worker_config_value(str_value,"\nOBS_WORKER_INSTANCES=\"")
+        str_jobs = self.get_worker_config_value(str_value,"\nOBS_WORKER_JOBS=\"")
+        str_repo_servers = self.get_worker_config_value(str_value,"\nOBS_REPO_SERVERS=\"")
+        server_get = ecs_server.get_server(ip)
+        if server_get["code"] != 200:
+            log_check.error(f'get server information from {ip} failed')
+            consistency_result = False
+            client.close()
+            return consistency_result
+        if str_ins == config['instances'] and str_jobs == config['jobs'] and str_repo_servers == config['repo_server']:
+            try:
+                if config['vcpus'] == server_get['server']['flavor']['vcpus'] and config['ram'] == server_get['server']['flavor']['ram']:
+                    consistency_result = True
+                else:
+                    consistency_result = False
+            except (KeyError, AttributeError) as e:
+                log_check.error(f'error due to {e}')
+                consistency_result = False
+                client.close()
+                return consistency_result
+        else:
+            try:
+                origin_instance_content = 'OBS_WORKER_INSTANCES="' + str_ins + '"'
+                origin_jobs_content = 'OBS_WORKER_JOBS="' + str_jobs + '"'
+                origin_repo_servers_content = 'OBS_REPO_SERVERS="' + str_repo_servers + '"'
+                client_modify_instance_cmd = "sed -i 's/" + origin_instance_content + "/OBS_WORKER_INSTANCES=\"" + config['instances'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command(client_modify_instance_cmd)
+                client_modify_jobs_cmd = "sed -i 's/" + origin_jobs_content + "/OBS_WORKER_JOBS=\"" + config['jobs'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command(client_modify_jobs_cmd)
+                client_modify_repo_servers_cmd = "sed -i 's/" + origin_repo_servers_content + "/OBS_REPO_SERVERS=\"" + config['instances'] + "\"/g' /etc/sysconfig/obs-server"
+                client.exec_command('systemctl restart obsworker')
+                worker_name = server_get["server"]["name"]
+                dest_instance = config['instances']
+                dest_jobs = config['jobs']
+                dest_repo_servers = config['repo_server']
+                log_check.info(f'worker:{worker_name}, ip:{ip}, change instance / jobs / repo_server form {str_ins} / {str_jobs} / {str_repo_servers} to {dest_instance} / {dest_jobs} / {dest_repo_servers}')
+                consistency_result = True
+            except BaseException as e:
+                log_check.error(f'error due to {e}')
+                consistency_result = False
+        client.close()
+        return consistency_result           
