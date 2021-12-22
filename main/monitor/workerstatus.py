@@ -296,7 +296,7 @@ class QueryOBSWorker(object):
                     consistency_result = True
                 else:
                     consistency_result = False
-            except KeyError or AttributeError as e:
+            except (KeyError, AttributeError) as e:
                 log_check.error(f'error due to {e}')
                 consistency_result = False
                 client.close()
