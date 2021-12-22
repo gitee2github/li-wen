@@ -27,9 +27,8 @@ from libs.conf.queryconfig import query_config
 from main.common.aes_decode import AESEncryAndDecry
 from main.common.wsdm_thread import WsdmThread
 from main.monitor.workerstatus import QueryOBSWorker
-
-multi_arch = ["aarch64", "x86"]
-worker_excluded = '/usr/li-wen/libs/conf/excluded_workers.yaml'
+from main.common.Constant import EXCLUDED_WORKERS
+from main.common.Constant import MULTI_ARCH
 
 class AutoExtendWorker(object):
     """
@@ -65,7 +64,7 @@ class AutoExtendWorker(object):
         new_workers_info = []
         thread_arch_level = []
         
-        for idx, arch in enumerate(multi_arch):
+        for idx, arch in enumerate(MULTI_ARCH):
             for level_idx in range(3):
                 level = 'l' + str(level_idx + 1)
                 try:
@@ -75,8 +74,8 @@ class AutoExtendWorker(object):
                     log_check.error(f"reason: {err}")
                     continue
 
-                default_instances = query_config(self.worker_conf[level_idx], "instances")
-                max_limit = int(query_config(self.worker_conf[level_idx], "max_limit"))
+                default_instances = query_config.get_value(self.worker_conf[level_idx], "instances")
+                max_limit = int(query_config.get_value(self.worker_conf[level_idx], "max_limit"))
 
                 # 计算得到预申请的数目
                 if schedule <= idle: 
@@ -135,8 +134,7 @@ class AutoExtendWorker(object):
         result_release = []
         excluded_workers = self.excluded_workers # 不在评估是否释放的worker范围
 
-        for idx in range(2):
-            arch = multi_arch[idx]
+        for idx, arch in enumerate(MULTI_ARCH):
             try:
                 aarh_idle_workers = idle_workers[idx].get(arch)
             except AttributeError as err:
@@ -177,7 +175,6 @@ class AutoExtendWorker(object):
         """
         release_worker_ip = idle_workers
         count = 0
-        release_worker = {}
 
         while release_worker_ip and count < num_check:
             workers_instance_state = self.worker_query.get_worker_instance(release_worker_ip)
@@ -222,10 +219,10 @@ class AutoExtendWorker(object):
         -----------
         """
         apply_worker = []
-        default_instances = query_config(self.worker_conf[level_idx], "instances")
-        vcpus = query_config(self.worker_conf[level_idx], "vcpus")
-        ram = query_config(self.worker_conf[level_idx], "ram")
-        jobs = query_config(self.worker_conf[level_idx], "jobs")
+        default_instances = query_config.get_value(self.worker_conf[level_idx], "instances")
+        vcpus = query_config.get_value(self.worker_conf[level_idx], "vcpus")
+        ram = query_config.get_value(self.worker_conf[level_idx], "ram")
+        jobs = query_config.get_value(self.worker_conf[level_idx], "jobs")
         level = 'l' + str(level_idx + 1)
         log_check.info(f"{thread_name}------Apply new workers: arch: {arch}, flavor: {level}, number: {num}")
         result = self.server.create(arch, level, passwd, num)
@@ -274,7 +271,7 @@ class AutoExtendWorker(object):
 
         delete_result = self.server.delete(ips)
         log_check.info(f"{thread_name}-------1st Call HWCloud delete：{delete_result} \n {ips}")
-        
+
         clean_result = self.worker_query.delete_down_obsworker(hostnames)
         log_check.info(f"{thread_name}--------2nd Call clean up：{clean_result} \n {hostnames}")
 
@@ -292,8 +289,8 @@ class AutoExtendWorker(object):
         -----------
         """
         password = "**********"
-        key = query_config("AES_Decry_Conf", "key")
-        decryption_file = query_config("AES_Decry_Conf", "worker_login")
+        key = query_config.get_value("AES_Decry_Conf", "key")
+        decryption_file = query_config.get_value("AES_Decry_Conf", "worker_login")
 
         if not os.path.isfile(decryption_file):
             log_check.error("NO decrption file")
@@ -316,7 +313,7 @@ class AutoExtendWorker(object):
         -----------
         """
         result_workers = dict()
-        with open(worker_excluded, encoding='utf-8') as f:
+        with open(EXCLUDED_WORKERS, encoding='utf-8') as f:
             try:
                 excluded_workers_yaml = yaml.safe_load(f)
             except yaml.scanner.ScannerError as err:
