@@ -1,0 +1,44 @@
+#!/bin/bash
+
+# **********************************************************************************
+# Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+# [openeuler-jenkins] is licensed under the Mulan PSL v1.
+# You can use this software according to the terms and conditions of the Mulan PSL v1.
+# You may obtain a copy of Mulan PSL v1 at:
+#     http://license.coscl.org.cn/MulanPSL
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+# PURPOSE.
+# See the Mulan PSL v1 for more details.
+# Author: wangge
+# Create: 2021-10-29
+# **********************************************************************************
+
+usage="Usage: $0 PROJECT... \n
+Get all package build time, in specified project, and list level distribution\n
+PROJECT\t: project name\n"
+
+if [ "$1" == "--help" ];then
+echo -e $usage
+exit 0
+fi
+
+#check validity of parameter num
+if [ $# -ne 1 ];then
+echo "Invalid parameter"
+echo -e $usage
+exit 0
+fi
+
+#recognition validity of project
+osc list $1 > /dev/null 2>&1
+if [ $? -eq 1 ];then
+echo "Invalid project name"
+echo -e $usage
+exit 0
+fi
+
+#generate result file for project
+exit 0
+#clean temp file
+
