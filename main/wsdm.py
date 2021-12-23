@@ -17,8 +17,9 @@
 This is main entrance
 """
 import sys
-sys.path.append('/usr/li-wen')
+# sys.path.append('/usr/li-wen')
 import csv
+import copy
 import codecs
 import configparser
 from logging import log
@@ -31,14 +32,14 @@ from main.monitor.project import QueryProject
 from libs.conf.queryconfig import query_config
 from libs.log.logger import log_check
 
-interval_for_check_schedule = int(query_config("Monitor", "interval_for_check_schedule"))
-interval_for_cycle_check_new_worker = int(query_config("Monitor", "interval_for_cycle_check_new_worker"))
-num_for_check_reserved_worker = int(query_config("Monitor", "num_for_check_reserved_worker"))
-interval_for_check_reserved_worker = int(query_config("Monitor", "interval_for_check_reserved_worker"))
+interval_for_check_schedule = int(query_config.get_value("Monitor", "interval_for_check_schedule"))
+interval_for_cycle_check_new_worker = int(query_config.get_value("Monitor", "interval_for_cycle_check_new_worker"))
+num_for_check_reserved_worker = int(query_config.get_value("Monitor", "num_for_check_reserved_worker"))
+interval_for_check_reserved_worker = int(query_config.get_value("Monitor", "interval_for_check_reserved_worker"))
 # 获取当前关联的project列表
-projects = query_config("Monitor", "projects").split()
+projects = query_config.get_value("Monitor", "projects").split()
 # 获取project所属的backend
-repo_server = query_config("Monitor", "repo_server")
+repo_server = query_config.get_value("Monitor", "repo_server")
 
 obs_worker = QueryOBSWorker()
 project = QueryProject()
@@ -81,8 +82,8 @@ def check_worker_enable(workers, passwd, interval, checK_start):
 
     flag = "Timeout, end verification."
     check_end = time.monotonic()
-    abnormal_workers = []
-    temp_workers = workers
+    abnormal_workers = workers[:]
+    
     # {"ip", "arch", "level", "vcpus", "ram", "jobs", "instances"}
     while (check_end - checK_start) < interval_for_check_schedule:
         if not workers:
@@ -90,42 +91,24 @@ def check_worker_enable(workers, passwd, interval, checK_start):
             break
         for worker in workers:
             wait_for_check_config = dict()
-            try:
-                ip = worker.get("ip")
-                wait_for_check_config["vcpus"] = worker.get("vcpus")
-                wait_for_check_config["ram"] = worker.get("ram")
-                wait_for_check_config["jobs"] = worker.get("jobs")
-                wait_for_check_config["instances"] = worker.get("instances")
-                wait_for_check_config["repo_server"] = repo_server
-            except (AttributeError, KeyError) as err:
-                log_check.error(f"reason: {err}")
-                continue
-            except (configparser.NoOptionError, configparser.NoSectionError) as err:
-                log_check.error(f"reason: {err.message}")
-                continue
+            ip = worker.get("ip")
+            wait_for_check_config["vcpus"] = worker.get("vcpus")
+            wait_for_check_config["ram"] = worker.get("ram")
+            wait_for_check_config["jobs"] = worker.get("jobs")
+            wait_for_check_config["instances"] = worker.get("instances")
+            wait_for_check_config["repo_server"] = repo_server
 
             service_status = obs_worker.check_service(ip, passwd) # 校验worker核心服务的状态
             config_same = obs_worker.check_worker_config(ip, passwd, wait_for_check_config)
 
             if service_status and config_same:
-                temp_workers.remove(worker) # 校验OK的包从列表中去掉
-
-        workers = temp_workers
+                abnormal_workers.remove(worker) # 校验OK的包从列表中去掉
+        
+        workers = abnormal_workers[:]
         log_check.info(f"After {interval}s, we go on next checking workers' service and configuration......")
         time.sleep(interval)
         check_end = time.monotonic()
-        
     log_check.info(flag)
-
-    for worker in temp_workers:
-        try:
-            abnormal_workers.append( worker.get("ip"))
-        except (AttributeError, KeyError) as err:
-            log_check.error(f"reason: {err}")
-            continue
-        except (configparser.NoOptionError, configparser.NoSectionError) as err:
-            log_check.error(f"reason: {err.message}")
-            continue
         
     return abnormal_workers
     
@@ -201,12 +184,14 @@ def main_progrecess():
             log_check.debug(f"Successfully create these workers:{apply_worker} , then check their status:")
 
             if (time.monotonic() - start) >= interval_for_check_schedule:
+                log_check.warning("Timeout, terminate the verification of the newly created worker status!")
                 continue
             
             # 校验新申请的worker的可用状态,abnormal_worker表示校验后异常或者不满足规格要求的worker
             abnormal_workers = check_worker_enable(apply_worker, passwd, interval_for_cycle_check_new_worker, start)
 
             if (time.monotonic() - start) >= interval_for_check_schedule:
+                log_check.warning("Timeout, terminate the delete of the newly created but abnormal workers!")
                 continue
 
             # 释放未达到可用状态的worker并清理后台相关信息
