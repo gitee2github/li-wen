@@ -31,6 +31,8 @@ from main.monitor.workerstatus import QueryOBSWorker
 from main.monitor.project import QueryProject
 from libs.conf.queryconfig import query_config
 from libs.log.logger import log_check
+from main.common.Constant import MULTI_ARCH
+from main.common.Constant import MULTI_LEVELS
 
 interval_for_check_schedule = int(query_config.get_value("Monitor", "interval_for_check_schedule"))
 interval_for_cycle_check_new_worker = int(query_config.get_value("Monitor", "interval_for_cycle_check_new_worker"))
@@ -45,25 +47,30 @@ obs_worker = QueryOBSWorker()
 project = QueryProject()
 auto_extend_worker = AutoExtendWorker()
 
-def sum_schedule(schedule_events_list):
+def sum_schedule(schedule_events):
     """
     @description : 计算schedule任务总数
     -----------
     @param :
-        schedule_events_list: schedule状态任务统计列表
+        schedule_events: schedule状态任务统计列表
+        {
+            "aarch64":{"l1":0, "l2":0, "l3":0}, 
+            "x86":{"l1":0, "l2":0, "l3":0}
+        }
     -----------
     @returns :
-        sum_schedule_aarch64：aarch64架构的schedule任务总数
-        sum_schedule_x86：x86架构的schedule任务总数
+        sum_schedule_events：schedule任务总数
     -----------
     """
-    sum_schedule_aarch64 = 0
-    sum_schedule_x86 = 0
-    for idx in range(1,4):
-        level = 'l' + str(idx)
-        sum_schedule_aarch64 += int(schedule_events_list[0]["aarch64"][level])
-        sum_schedule_x86 += int(schedule_events_list[1]["x86"][level])
-    return sum_schedule_aarch64, sum_schedule_x86
+    sum_schedule_events = 0
+
+    for arch in MULTI_ARCH:
+        multi_level_events = schedule_events.get(arch)
+        for level_idx  in range(MULTI_LEVELS):
+            level = 'l' + str(level_idx + 1)
+            sum_schedule_events += multi_level_events.get(level)
+            
+    return sum_schedule_events
 
 # 校验workers指向的worker的可用状态
 def check_worker_enable(workers, passwd, interval, checK_start):
@@ -113,37 +120,46 @@ def check_worker_enable(workers, passwd, interval, checK_start):
     return abnormal_workers
     
     
-def save_workers_info(workers, type, save_path, save_mode):
+def save_workers_info(workers, save_type, save_path, save_mode):
     """
     @description : 保存worker信息到日志文件同级目录
     -----------
     @param :
         workers：worker信息列表
+        save_type: 信息类型，决定最终保存为csv的第一行属性名
+        save_path：保存文件路径
+        save_mode：写模式，w/a+
     -----------
     @returns : NA
     -----------
     """
     if workers is None:
         log_check.error(f"workers is empty and no related info will be save!")
-        return
+        return False
 
     with codecs.open(save_path, save_mode, 'utf-8') as result_file:
         writer = csv.writer(result_file)
-        if type == "new":
+        if save_type == "new":
             writer.writerow(["ip", "name", "arch", "level", "create_time"])
         else:
             writer.writerow(["ip", "name", "arch", "vcpus", "create_time"])
 
         for worker in workers:
-            if type == "new":
-                data = [worker.get("ip"), worker.get("name"), worker.get("arch"), \
-                    worker.get("level"), time.asctime( time.localtime(time.time()))]
-            else:
-                data = [worker.get("ip"), worker.get("name"), worker.get("arch"), \
-                    worker.get("flavor").get("vcpus"), time.asctime( time.localtime(time.time()))]
+            try:
+                if save_type == "new":
+                    data = [worker.get("ip"), worker.get("name"), worker.get("arch"), \
+                        worker.get("level")]
+                else:
+                    data = [worker.get("ip"), worker.get("name"), worker.get("arch"), \
+                        worker.get("flavor").get("vcpus")]
+                data.append(time.asctime( time.localtime(time.time())))
+            except AttributeError as err:
+                log_check.error(f"Abnormal data from: {workers}, error meaasge: {err}")
+                return False
             writer.writerow(data)
 
-    
+    return True
+
 def main_progrecess():
     """
     主函数入口
@@ -158,17 +174,18 @@ def main_progrecess():
 
         # 获取ECSServers().list返回的所欲worker 信息列表
         HWCloud_workers = ecs_server.list_servers().get('servers')
-        save_workers_info(HWCloud_workers, "cur", global_config.CURRENT_WORKERS_INFO, 'w')
+        if not save_workers_info(HWCloud_workers, "cur", global_config.CURRENT_WORKERS_INFO, 'w'):
+            log_check.warning("Save data from ecs_server.list_servers() failed, terminate!")
 
         # 获取当前生产环境的所有worker ip列表
-        obs_workers_ip = obs_worker.get_all_worker_ip()
+        obs_workers_ip = obs_worker.get_all_worker_list()
 
         # 获取 project中schedule状态的不同构建时长级别的统计结果
         schedule_events_list = project.query_schedule_statistics(projects)
-        log_check.debug(f"{schedule_events_list}")
+        log_check.info(f"Get realtime schedule events: {schedule_events_list}")
 
-        sum_schedule_aarch64, sum_schedule_x86 = sum_schedule(schedule_events_list)
-        if sum_schedule_aarch64 != 0 or sum_schedule_x86 != 0:
+        sum_schedule_enents = sum_schedule(schedule_events_list)
+        if sum_schedule_enents != 0:
             log_check.info(f"++++++++++++++We have schedule events, then cacluate workers to apply!++++++++++++")
 
             # 获取当前生产环境中的worker中处于idle状态的instance數量统计结果
@@ -209,7 +226,6 @@ def main_progrecess():
             if not result:
                 log_check.error(f"No worker info file, stop release!")
                 continue
-
             log_check.info("Initial all_obs_worker_info.log succeeded!")
             
             # 初步筛选处于idle状态的worker ip列表
@@ -221,8 +237,6 @@ def main_progrecess():
                 num_for_check_reserved_worker, interval_for_check_reserved_worker)
             
             log_check.info(f"-------------Idle workers {result_release}!-------------")
-
-        
 
 if __name__ == '__main__':
     main_progrecess()
