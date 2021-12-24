@@ -43,7 +43,7 @@ flavorMapping:
       l3: c6s.16xlarge.2
   aarch64:
       # 基于EulerOS 2.8生成的obs-worker镜像
-      imageRef: 33523d8a-a259-4c68-8229-b34e27175f47
+      imageRef: 022217f3-4fc1-4fd2-b750-6b229c238f2a
       l1: ki1.4xlarge.4
       l2: ki1.8xlarge.4
       l3: ki1.16xlarge.4
