@@ -1,0 +1,76 @@
+#!/bin/bash
+
+# **********************************************************************************
+# Copyright (c) Huawei Technologies Co., Ltd. 2021-2021. All rights reserved.
+# [openeuler-jenkins] is licensed under the Mulan PSL v1.
+# You can use this software according to the terms and conditions of the Mulan PSL v1.
+# You may obtain a copy of Mulan PSL v1 at:
+#     http://license.coscl.org.cn/MulanPSL
+# THIS SOFTWARE IS PROVIDED ON AN "AS IS" BASIS, WITHOUT WARRANTIES OF ANY KIND, EITHER EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO NON-INFRINGEMENT, MERCHANTABILITY OR FIT FOR A PARTICULAR
+# PURPOSE.
+# See the Mulan PSL v1 for more details.
+# Author: wangge
+# Create: 2021-10-29
+# **********************************************************************************
+
+usage="Usage: _query_status_num_of_project(PROJECT,REPOSITORY,STATUS)\n
+Get the amount of package list which is in specific status.\n
+PROJECT\t: project name to be counted\n
+REPOSITORY\t: repository name\n
+STATUS\t\t: the specific status to be counted in project, valid value:\n
+\t\tscheduled, dispatch, building, signing, finished, succeeded,\n
+\t\tfailed, unresolvable, blocked, excluded, all\n"
+
+if [[ "${*}" =~ "--help" ]];then
+echo -e $usage
+exit 0
+fi
+
+#check validity of parameter num
+if [ $# -ne 3 ];then
+echo "Invalid parameter"
+echo -e $usage
+exit 0
+fi
+
+#recognition validity of project
+osc list $1 > /dev/null 2>&1
+if [ $? -eq 1 ];then
+echo "Invalid project name"
+echo -e $usage
+exit 0
+fi
+
+#recognition validity of architecture
+result=`osc api -X GET /published/$1/$2?view=status | grep -c unknown`
+if [ $result -eq 1 ];then
+echo "Invalid architecture name"
+echo -e $usage
+exit 0
+fi
+
+#recognition validity of status
+status=(
+scheduled
+dispatch
+building
+signing
+finished
+succeeded
+failed
+unresolvable
+blocked
+excluded
+all
+)
+if [[ ! "${status[@]}" =~ "${3}" ]];then
+echo "Invalid status"
+echo -e $usage
+exit 0
+fi
+
+#generate result file for project
+exit 0
+#clean temp file
+
