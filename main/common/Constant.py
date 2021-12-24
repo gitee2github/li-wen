@@ -35,5 +35,8 @@ GETBUILDTIME_CHECK_SHELL = 'getbuildtime_check_param'
 # multi architecture
 MULTI_ARCH = ["aarch64", "x86"]
 
+# multi level num
+MULTI_LEVELS = 3
+
 # excluded workers
 EXCLUDED_WORKERS = '/usr/li-wen/libs/conf/excluded_workers.yaml'

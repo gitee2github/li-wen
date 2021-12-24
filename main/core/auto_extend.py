@@ -29,6 +29,7 @@ from main.common.wsdm_thread import WsdmThread
 from main.monitor.workerstatus import QueryOBSWorker
 from main.common.Constant import EXCLUDED_WORKERS
 from main.common.Constant import MULTI_ARCH
+from main.common.Constant import MULTI_LEVELS
 
 class AutoExtendWorker(object):
     """
@@ -39,21 +40,21 @@ class AutoExtendWorker(object):
         self.worker_query = QueryOBSWorker()
         self.worker_conf = ["L1_Worker_Conf", "L2_Worker_Conf", "L3_Worker_Conf"]
         
-    def calcuate_and_create_worker(self, schedule_events_list, idle_instances_list, passwd):
+    def evaluate_new_workers(self, schedule_events_list, idle_instances_list, passwd):
         """
         @description : 计算各个规格的worker申请数目并调用华为云的创建接口
         -----------
         @param :
             schedule_events_list:并发构建任务统计列表，例如：
-                schedule_events_list = [
-                    {"aarch64":{"l1":0, "l2":12, "l3":0}},
-                    {"x86":{"l1":0, "l2":0, "l3":0}}
-                ]
+                schedule_events_list = {
+                    "aarch64":{"l1":0, "l2":12, "l3":0},
+                    "x86":{"l1":0, "l2":0, "l3":0}
+                }
             idle_instances_list:空闲instance统计列表，例如：
-                idle_instances_list = [
-                    {"aarch64":{"l1":0, "l2":0, "l3":0}},
-                    {"x86":{"l1":0, "l2":0, "l3":0}}
-                ]
+                idle_instances_list = {
+                    "aarch64":{"l1":0, "l2":0, "l3":0},
+                    "x86":{"l1":0, "l2":0, "l3":0}
+                }
             passwd: 创建worker的初始登录密码
         -----------
         @returns :
@@ -63,13 +64,13 @@ class AutoExtendWorker(object):
         start_time = time.time()
         new_workers_info = []
         thread_arch_level = []
-        
-        for idx, arch in enumerate(MULTI_ARCH):
-            for level_idx in range(3):
+
+        for arch in MULTI_ARCH:
+            for level_idx in range(MULTI_LEVELS):
                 level = 'l' + str(level_idx + 1)
                 try:
-                    schedule = (schedule_events_list[idx].get(arch)).get(level)
-                    idle = (idle_instances_list[idx].get(arch)).get(level)
+                    schedule = schedule_events_list[arch][level]
+                    idle = idle_instances_list[arch][level]
                 except AttributeError as err:
                     log_check.error(f"reason: {err}")
                     continue
@@ -99,29 +100,13 @@ class AutoExtendWorker(object):
         log_check.info(f"end_time: {time.time() - start_time}")
         return new_workers_info
 
-    def evaluate_new_workers(self, schedule_events_list, idle_instances_list, passwd):
-        """
-        @description : 评估申请worker
-        -----------
-        @param :
-            schedule_events_list:并发构建任务统计列表
-            idle_instances_list:空闲instance统计列表
-            passwd: 创建worker的初始登录密码
-        -----------
-        @returns :创建好的worker详细信息（部分字段为申请时的初始值，为了后面的校验做对比）
-        -----------
-        """
-        if len(schedule_events_list) != 2 or len(idle_instances_list) != 2:
-            log_check.error(f"incomplete input data, please check! ")
-            return None
-        return self.calcuate_and_create_worker(schedule_events_list, idle_instances_list, passwd)
-
     def evaluate_idle_workers(self, idle_workers, num_check, interval):
         """
         @description :评估空闲worker
         -----------
         @param :
             idle_workers：处于空闲状态的worker
+            {"aarch64":[], "x86":[]}
             arch：架构
             num_check:校验worker的次数
             interval：校验等待的时间间隔
@@ -134,13 +119,9 @@ class AutoExtendWorker(object):
         result_release = []
         excluded_workers = self.excluded_workers # 不在评估是否释放的worker范围
 
-        for idx, arch in enumerate(MULTI_ARCH):
-            try:
-                aarh_idle_workers = idle_workers[idx].get(arch)
-            except AttributeError as err:
-                log_check.error(f"reason: {err}")
-                continue
-
+        for arch in MULTI_ARCH:
+            aarh_idle_workers = idle_workers[arch]
+            
             # 去掉不在可释放范围的worker ip
             aarh_idle_workers = list(set(aarh_idle_workers).difference(set(excluded_workers.get(arch))))
             
