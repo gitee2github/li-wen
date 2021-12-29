@@ -301,6 +301,9 @@ class QueryOBSWorker(object):
            instance_list : aarch64 or x86 instance list 
         """
         instance_list = {"aarch64":{"l1":0, "l2":0, "l3":0}, "x86":{"l1":0, "l2":0, "l3":0}}
+        result = self.generate_all_worker_info_file()
+        if not result:
+            return instance_list
         idle_list = self.query_idle_worker_ip(iplist)
         self._convert_instance_list(idle_list, "aarch64", instance_list)
         self._convert_instance_list(idle_list, "x86", instance_list)
