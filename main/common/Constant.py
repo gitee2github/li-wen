@@ -27,8 +27,8 @@ X86_TMP_STATUS_PATH = '/var/tmp/li-wen/x86_temp_status.log'
 DATABASE_PATH = '/usr/li-wen/main/monitor/buildtime_cache.db'
 WORKER_INFO_PATH = '/var/tmp/li-wen/all_obs_worker_info.log'
 INSTANCE_STATISTICS_PATH = '/var/tmp/li-wen/instance_statistics_tmp.log'
-ENCRYPTED_DATA_PATH = '/usr/obs-wsdm/libs/conf/worker_management_platform_login_info'
-DECRYPT_FILE_PATH = '/usr/obs-wsdm/libs/conf/decryption_file'
+ENCRYPTED_DATA_PATH = '/usr/li-wen/libs/conf/worker_management_platform_login_info'
+DECRYPT_FILE_PATH = '/usr/li-wen/libs/conf/decryption_file'
 
 # value constant
 BUILD_TIME_ITEM_LEN = 17

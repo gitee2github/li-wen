@@ -699,11 +699,12 @@ class QueryOBSWorker(object):
         client = paramiko.SSHClient()
         client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         #establish connection to server
+        hostinfo = self.get_decrypt_password()
         try:
             client.connect(
-                hostname = self.get_server_ipaddress()[0],
+                hostname = hostinfo[1],
                 username = 'root',
-                password = self.get_server_ipaddress()[1],
+                password = hostinfo[0],
                 timeout = 5
                 )
         except socket.timeout as e:
