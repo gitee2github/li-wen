@@ -17,7 +17,7 @@
 This is main entrance
 """
 import sys
-# sys.path.append('/usr/li-wen')
+sys.path.append('/usr/li-wen')
 import csv
 import copy
 import codecs
@@ -83,7 +83,8 @@ def check_worker_enable(workers, passwd, interval, checK_start):
         interval：校验的等待时间间隔
         checK_start：校验开始时间
     -----------
-    @returns : NA
+    @returns : 
+        abnormal_workers: 异常状态worker，待释放
     -----------
     """
 
@@ -197,8 +198,11 @@ def main_progrecess():
 
             # 评估并创建worker
             apply_worker = auto_extend_worker.evaluate_new_workers(schedule_events_list, idle_instances_list, passwd)
+            if not apply_worker:
+                continue
+
             save_workers_info(apply_worker, "new", global_config.REALTIME_CREATED_WORKERS_INFO, 'a+')
-            log_check.debug(f"Successfully create these workers:{apply_worker} , then check their status:")
+            
 
             if (time.monotonic() - start) >= interval_for_check_schedule:
                 log_check.warning("Timeout, terminate the verification of the newly created worker status!")
@@ -213,7 +217,7 @@ def main_progrecess():
 
             # 释放未达到可用状态的worker并清理后台相关信息
             log_check.debug(f"Abnormal workers:{abnormal_workers} , then delete them:")
-            auto_extend_worker.delete_workers(abnormal_workers)
+            auto_extend_worker.delete_workers('noarch', abnormal_workers)
 
             time_consume = time.monotonic() - start
             if time_consume < interval_for_check_schedule:

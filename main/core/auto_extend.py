@@ -21,7 +21,7 @@ import os
 import re
 import time
 import yaml
-from libs.cloud.HWCloud.ecs_servers import ECSServers
+from libs.cloud.HWCloud.ecs_servers import ecs_server
 from libs.log.logger import log_check
 from libs.conf.queryconfig import query_config
 from main.common.aes_decode import AESEncryAndDecry
@@ -36,7 +36,6 @@ class AutoExtendWorker(object):
     This is a class for dynamically extending OBS worker machine resources 
     """
     def __init__(self):
-        self.server = ECSServers()
         self.worker_query = QueryOBSWorker()
         self.worker_conf = ["L1_Worker_Conf", "L2_Worker_Conf", "L3_Worker_Conf"]
         
@@ -97,6 +96,11 @@ class AutoExtendWorker(object):
             thread.join()
         
         # 回到主线程
+        if not new_workers_info:
+            log_check.debug(f"No workers created")
+        else:
+            log_check.debug(f"Successfully create these workers: {new_workers_info} , then check their status:")
+
         log_check.info(f"end_time: {time.time() - start_time}")
         return new_workers_info
 
@@ -164,7 +168,7 @@ class AutoExtendWorker(object):
                 continue
             for worker_instance in workers_instance_state:
                 ip = worker_instance.get("ip")
-                hostname = self.server.get_hostname(ip)
+                hostname = ecs_server.get_hostname(ip)
                 instance_run = worker_instance.get("instance_run")
                 if instance_run > 0:
                     log_check.warning(f"{thread_name}------No release {ip}, {hostname}: it has running instances")
@@ -180,6 +184,7 @@ class AutoExtendWorker(object):
             release_worker['arch'] = arch
         else:
             log_check.info(f"{thread_name}------No workers will be released")
+            release_worker = {'code': 400, 'error': 'No workers to be released', 'arch':arch}
 
         return release_worker
         
@@ -206,7 +211,7 @@ class AutoExtendWorker(object):
         jobs = query_config.get_value(self.worker_conf[level_idx], "jobs")
         level = 'l' + str(level_idx + 1)
         log_check.info(f"{thread_name}------Apply new workers: arch: {arch}, flavor: {level}, number: {num}")
-        result = self.server.create(arch, level, passwd, num)
+        result = ecs_server.create(arch, level, passwd, num)
 
         try:
             return_code = int(result.get("code"))
@@ -223,7 +228,7 @@ class AutoExtendWorker(object):
         for ip in new_workers_ip:
             new_worker = dict()
             new_worker["ip"] = ip
-            new_worker["name"] = self.server.get_hostname(ip)
+            new_worker["name"] = ecs_server.get_hostname(ip)
             new_worker["arch"] = arch
             new_worker["level"] = level
             new_worker["vcpus"] = vcpus
@@ -248,9 +253,9 @@ class AutoExtendWorker(object):
             delete_result：释放返回结果
         -----------
         """
-        hostnames = [self.server.get_hostname(ip) for ip in ips]
+        hostnames = [ecs_server.get_hostname(ip) for ip in ips]
 
-        delete_result = self.server.delete(ips)
+        delete_result = ecs_server.delete_servers(ips)
         log_check.info(f"{thread_name}-------1st Call HWCloud delete：{delete_result} \n {ips}")
 
         clean_result = self.worker_query.delete_down_obsworker(hostnames)
