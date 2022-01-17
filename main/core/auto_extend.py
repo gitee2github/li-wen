@@ -15,7 +15,6 @@
 # ******************************************************************************/
 
 import ast
-import configparser
 import math
 import os
 import re
@@ -30,6 +29,8 @@ from main.monitor.workerstatus import QueryOBSWorker
 from main.common.Constant import EXCLUDED_WORKERS
 from main.common.Constant import MULTI_ARCH
 from main.common.Constant import MULTI_LEVELS
+from main.common.Constant import DECRYPTION_KEY
+from main.common.Constant import ENCRYPTED_DATA_PATH
 
 class AutoExtendWorker(object):
     """
@@ -275,17 +276,15 @@ class AutoExtendWorker(object):
         -----------
         """
         password = "**********"
-        key = query_config.get_value("AES_Decry_Conf", "key")
-        decryption_file = query_config.get_value("AES_Decry_Conf", "worker_login")
 
-        if not os.path.isfile(decryption_file):
+        if not os.path.isfile(ENCRYPTED_DATA_PATH):
             log_check.error("NO decrption file")
             return password
         
-        aes = AESEncryAndDecry(key, decryption_file)
+        aes = AESEncryAndDecry(DECRYPTION_KEY, ENCRYPTED_DATA_PATH, None)
         decryption_str = aes.decrypt_file
         user_dict = ast.literal_eval(decryption_str)
-        password = user_dict.get("passwd")
+        password = user_dict['worker']['pass']
         return password
 
     @property

@@ -15,6 +15,7 @@
 # Create: 2021-10-29
 # **********************************************************************************
 """
+import ast
 import re
 import paramiko
 import requests
@@ -33,8 +34,10 @@ from main.common.Constant import WORKER_INFO_PATH
 from main.common.Constant import INSTANCE_STATISTICS_PATH
 from main.common.Constant import EMPTY_CMD_LIST
 from main.common.Constant import ENCRYPTED_DATA_PATH
-from main.common.Constant import DECRYPT_FILE_PATH
 from main.common.Constant import DECRYPTION_KEY
+from main.common.Constant import OBS_USER_ID
+from main.common.Constant import OBS_USER_PASS
+from main.common.Constant import  OBS_FRONT
 
 class QueryOBSWorker(object):
     """
@@ -97,7 +100,7 @@ class QueryOBSWorker(object):
         if not os.path.exists(os.path.dirname(WORKER_INFO_PATH)):
             os.makedirs(os.path.dirname(WORKER_INFO_PATH))
         #gengerate worker information file
-        cmd = 'curl -s --user OBSWSDM:obswsdm123 -X GET https://build.openeuler.org/worker/_status -o ' + WORKER_INFO_PATH
+        cmd = f'curl -s --user {OBS_USER_ID}:{OBS_USER_PASS} -X GET {OBS_FRONT} -o {WORKER_INFO_PATH}'
         result = ExecuteCmd.cmd_status(cmd.split())
         if result != 0:
             log_check.error(f'generate {WORKER_INFO_PATH} failed!')
@@ -354,20 +357,6 @@ class QueryOBSWorker(object):
             if idle:
                 idle_worker_list["x86"].append(x86ip)
         return idle_worker_list
-
-    @staticmethod
-    def get_worker_value_name_password():
-        """
-        @description : get worker name and password decrypt file
-        -----------
-        @param : NA
-        -----------
-        @returns : 
-            AESEncryAndDecry().decrypt_file
-        ----------
-        """
-        decryptor = AESEncryAndDecry(DECRYPTION_KEY,DECRYPT_FILE_PATH)
-        return decryptor.decrypt_file
         
     def get_monitor_resource(self,resource,ip,times):
         """
@@ -404,10 +393,10 @@ class QueryOBSWorker(object):
 
         headers = {'Content-type':'application/json'}
         data = {"order":2,"index_patterns":["stdout-*"],"settings":{"index":{"max_result_window":"200000"}}}
-        result = self.get_worker_value_name_password()
-        result_cut = result.split('\n')
-        username = result_cut[0]
-        password = result_cut[1]
+        decryption_str = self.get_decrypt_password()
+        worker_login = ast.literal_eval(decryption_str)
+        username = worker_login['monitor_server']['user']
+        password = worker_login['monitor_server']['pass']
         if resource == 'mem':
             r_url = url_mem
         elif resource == 'CPU':
@@ -519,7 +508,35 @@ class QueryOBSWorker(object):
             log_check.error(f'this IP is not exist,due to {e}')
             return None
 
-    def check_service(self,ip,passwd):
+    def create_ssh_connector(self, hostip, hostpass):
+        """
+        @description : Create a ssh connector
+        -----------
+        @param :
+            hostip: ip address
+            hostpass: password for hostip
+        -----------
+        @returns :
+        -----------
+        """
+        client = paramiko.SSHClient()
+        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        try:
+            client.connect(
+                hostname = hostip,
+                username = 'root',
+                password = hostpass,
+                timeout = 5
+                )
+        except socket.timeout as e:
+            log_check.error(f"Not connect this ip,please check password or ip,due to {e}")
+            client.close()
+            return None
+
+        return client
+        
+
+    def check_service(self, ip, passwd):
         """
         @description : check ip obsworker service status
         -------------
@@ -532,18 +549,11 @@ class QueryOBSWorker(object):
         """
         service_state = dict()
         service_state["ip"] = ip
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self.create_ssh_connector(ip, passwd)
         try:
-            client.connect(
-                hostname = ip,
-                username = 'root',
-                password = passwd,
-                timeout = 5
-                )
             stdin,stdout,stderr = client.exec_command('systemctl status obsworker')
-        except socket.timeout as e:
-            log_check.error(f"Not connect this ip,please check password or ip,due to {e}")
+        except AttributeError as e:
+            log_check.error(e)
             client.close()
             return None
         str_obs = stdout.read().decode('utf-8')
@@ -588,19 +598,12 @@ class QueryOBSWorker(object):
         @returns : 
             consistency_result : is it consistent true or false
         """
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+        client = self.create_ssh_connector(ip, passwd)
         try:
-            client.connect(
-                hostname = ip,
-                username = 'root',
-                password = passwd,
-                timeout = 5
-                )
             #get the values of jobs and instances from obs-server
             stdin,stdout,stderr = client.exec_command("cat /etc/sysconfig/obs-server")
-        except socket.timeout as e:
-            log_check.error(f'Not connect this IP.due to {e}')
+        except AttributeError as e:
+            log_check.error(e)
             client.close()
             consistency_result = False
             return consistency_result
@@ -657,8 +660,8 @@ class QueryOBSWorker(object):
         @returns :
             decryptor.decrypt_file.split('\n')
         """
-        decryptor = AESEncryAndDecry('ipaddress and password', ENCRYPTED_DATA_PATH, None)
-        return decryptor.decrypt_file.split('\n')
+        decryptor = AESEncryAndDecry(DECRYPTION_KEY, ENCRYPTED_DATA_PATH, None)
+        return decryptor.decrypt_file
 
     def valid_workername_filter(self, workernamelist, sshclient):
         """
@@ -696,22 +699,11 @@ class QueryOBSWorker(object):
         @return: bool dictionary express corresponding workername's result
         """
         result_dict = {}
-        client = paramiko.SSHClient()
-        client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
         #establish connection to server
-        hostinfo = self.get_decrypt_password()
-        try:
-            client.connect(
-                hostname = hostinfo[1],
-                username = 'root',
-                password = hostinfo[0],
-                timeout = 5
-                )
-        except socket.timeout as e:
-            log_check.error(f'connect ssh server failed! due to {e}')
-            client.close()
-            result_dict["client"] = False
-            return result_dict
+        decryption_str = self.get_decrypt_password()
+        hostinfo = ast.literal_eval(decryption_str)
+        client = self.create_ssh_connector(hostinfo['main_backend']['ip'], hostinfo['main_backend']['pass'])
+
         #check validation of workername
         valid_workername_list = self.valid_workername_filter(workernamelist, client)
         #delete worker in status down
